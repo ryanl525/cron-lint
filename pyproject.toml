@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cronlint"
+version = "0.1.0"
+description = "A validating parser and pretty printer for cron expressions"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "ryanl525" }]
+
+[tool.setuptools.packages.find]
+include = ["cronlint*"]
