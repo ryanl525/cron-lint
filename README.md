@@ -87,6 +87,22 @@ both are restricted, because that's how cron itself evaluates a schedule
 like `0 0 13 * FRI` (the 13th of the month, or any Friday — not both at
 once). That's a common source of confusion for people writing cron by hand.
 
+### Command line
+
+Installing the package (`pip install -e .`) puts a `cronlint` command on your
+PATH for checking crontab files without writing any Python:
+
+```
+$ cronlint /etc/crontab /etc/cron.d/*
+/etc/crontab: OK (3 entries)
+/etc/cron.d/backup: line 2, column 7: 25 is out of range for hour (expected 0-23)
+  */5 8-25 * * 1-5 /usr/local/bin/check.sh
+        ^
+```
+
+It exits 0 if every file given is valid, 1 if any file fails to parse or
+can't be read.
+
 ## What's supported
 
 - Standard 5-field schedules: minute, hour, day of month, month, day of week

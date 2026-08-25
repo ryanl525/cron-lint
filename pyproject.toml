@@ -11,5 +11,8 @@ requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "ryanl525" }]
 
+[project.scripts]
+cronlint = "cronlint.cli:main"
+
 [tool.setuptools.packages.find]
 include = ["cronlint*"]
