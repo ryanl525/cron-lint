@@ -52,6 +52,21 @@ class CliTests(unittest.TestCase):
             self.assertIn("OK", out.getvalue())
             self.assertIn("60 is out of range", err.getvalue())
 
+    def test_invalid_file_reports_every_bad_line_not_just_the_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write(
+                tmp,
+                "crontab",
+                "60 * * * * /bin/one.sh\n0 2 * * * /bin/good.sh\n* * * * 8 /bin/two.sh\n",
+            )
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                code = main([path])
+            self.assertEqual(code, 1)
+            output = err.getvalue()
+            self.assertIn("60 is out of range for minute", output)
+            self.assertIn("8 is out of range for day of week", output)
+
     def test_multiple_entries_pluralize_the_count(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = self._write(

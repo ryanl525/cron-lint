@@ -66,6 +66,19 @@ except CronSyntaxError as exc:
 #         ^
 ```
 
+`parse_crontab` stops at the first bad line. If you want every error in the
+file in one pass, use `lint_crontab` instead: it returns `(entries, errors)`,
+where `entries` holds every line that parsed fine and `errors` holds a
+`CronSyntaxError` for every line that didn't, both in file order.
+
+```python
+from cronlint import lint_crontab
+
+entries, errors = lint_crontab(text)
+for error in errors:
+    print(error)
+```
+
 ### Pretty printing
 
 `describe` turns a parsed schedule back into a sentence, which is useful for
@@ -101,7 +114,7 @@ $ cronlint /etc/crontab /etc/cron.d/*
 ```
 
 It exits 0 if every file given is valid, 1 if any file fails to parse or
-can't be read.
+can't be read. Every bad line in a file is reported, not just the first one.
 
 ## What's supported
 

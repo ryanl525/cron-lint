@@ -6,6 +6,7 @@ from .parser import (
     Star,
     Step,
     Value,
+    lint_crontab,
     parse_crontab,
     parse_schedule,
 )
@@ -21,6 +22,7 @@ __all__ = [
     "Star",
     "Step",
     "Value",
+    "lint_crontab",
     "parse_crontab",
     "parse_schedule",
     "describe",

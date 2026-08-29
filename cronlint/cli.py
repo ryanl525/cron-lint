@@ -6,7 +6,7 @@ import argparse
 import sys
 from typing import Optional, Sequence
 
-from .parser import CronSyntaxError, parse_crontab
+from .parser import lint_crontab
 
 
 def _validate_file(path: str) -> bool:
@@ -17,10 +17,10 @@ def _validate_file(path: str) -> bool:
         print(f"{path}: {exc.strerror}", file=sys.stderr)
         return False
 
-    try:
-        entries = parse_crontab(text)
-    except CronSyntaxError as exc:
-        print(f"{path}: {exc}", file=sys.stderr)
+    entries, errors = lint_crontab(text)
+    if errors:
+        for error in errors:
+            print(f"{path}: {error}", file=sys.stderr)
         return False
 
     noun = "entry" if len(entries) == 1 else "entries"

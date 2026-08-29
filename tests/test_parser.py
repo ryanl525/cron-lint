@@ -7,6 +7,7 @@ from cronlint.parser import (
     Star,
     Step,
     Value,
+    lint_crontab,
     parse_crontab,
     parse_schedule,
 )
@@ -218,6 +219,48 @@ class ParseCrontabTests(unittest.TestCase):
         self.assertEqual(exc.lineno, 3)
         self.assertEqual(exc.column, 7)
         self.assertIn("25 is out of range for hour", exc.message)
+
+
+class LintCrontabTests(unittest.TestCase):
+    def test_valid_file_has_no_errors(self):
+        text = "0 2 * * * /bin/one.sh\n30 3 * * * /bin/two.sh\n"
+        entries, errors = lint_crontab(text)
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(errors, [])
+
+    def test_collects_every_bad_line_not_just_the_first(self):
+        text = (
+            "60 * * * * /bin/one.sh\n"
+            "0 2 * * * /bin/good.sh\n"
+            "* * * * 8 /bin/two.sh\n"
+        )
+        entries, errors = lint_crontab(text)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].command, "/bin/good.sh")
+        self.assertEqual(len(errors), 2)
+        self.assertEqual(errors[0].lineno, 1)
+        self.assertIn("60 is out of range for minute", errors[0].message)
+        self.assertEqual(errors[1].lineno, 3)
+        self.assertIn("8 is out of range for day of week", errors[1].message)
+
+    def test_a_bad_line_does_not_stop_later_valid_lines_from_being_kept(self):
+        text = "not enough fields\n0 2 * * * /bin/one.sh\n"
+        entries, errors = lint_crontab(text)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].command, "/bin/one.sh")
+
+    def test_still_skips_comments_blanks_and_env_assignments(self):
+        text = (
+            "\n"
+            "# a comment\n"
+            "PATH=/usr/bin\n"
+            "60 * * * * /bin/bad.sh\n"
+        )
+        entries, errors = lint_crontab(text)
+        self.assertEqual(entries, [])
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(errors[0].lineno, 4)
 
 
 if __name__ == "__main__":

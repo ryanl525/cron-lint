@@ -213,11 +213,28 @@ def parse_schedule(text: str, *, lineno: int = 1) -> ScheduleFields:
     return _parse_fields(tokens, text, lineno)
 
 
+def _parse_line(line: str, lineno: int) -> CronEntry:
+    tokens = _tokenize(line)
+    if len(tokens) < 6:
+        raise _error(
+            lineno,
+            len(line) + 1,
+            line,
+            f"expected 5 schedule fields and a command, found {len(tokens)} field(s)",
+        )
+
+    fields = _parse_fields(tokens[:5], line, lineno)
+    command_col = tokens[5][1]
+    command = line[command_col - 1 :]
+    return CronEntry(lineno=lineno, fields=fields, command=command)
+
+
 def parse_crontab(text: str) -> List[CronEntry]:
     """Parse a crontab-style file: comments, env assignments, and entries.
 
     Returns a list of CronEntry. Raises CronSyntaxError on the first invalid
-    entry, pointing at the exact line and column.
+    entry, pointing at the exact line and column. Use lint_crontab if you
+    want every error in the file instead of just the first.
     """
     entries = []
     for lineno, line in enumerate(text.splitlines(), start=1):
@@ -227,18 +244,31 @@ def parse_crontab(text: str) -> List[CronEntry]:
         if _ENV_ASSIGNMENT_RE.match(stripped):
             continue
 
-        tokens = _tokenize(line)
-        if len(tokens) < 6:
-            raise _error(
-                lineno,
-                len(line) + 1,
-                line,
-                f"expected 5 schedule fields and a command, found {len(tokens)} field(s)",
-            )
-
-        fields = _parse_fields(tokens[:5], line, lineno)
-        command_col = tokens[5][1]
-        command = line[command_col - 1 :]
-        entries.append(CronEntry(lineno=lineno, fields=fields, command=command))
+        entries.append(_parse_line(line, lineno))
 
     return entries
+
+
+def lint_crontab(text: str) -> Tuple[List[CronEntry], List[CronSyntaxError]]:
+    """Parse a crontab-style file, collecting every bad line instead of
+    stopping at the first one.
+
+    A syntax error on one line says nothing about the lines around it, so
+    there's no reason a single bad entry should hide the rest of the file's
+    problems. Returns (valid_entries, errors), each in file order.
+    """
+    entries = []
+    errors = []
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if _ENV_ASSIGNMENT_RE.match(stripped):
+            continue
+
+        try:
+            entries.append(_parse_line(line, lineno))
+        except CronSyntaxError as exc:
+            errors.append(exc)
+
+    return entries, errors
