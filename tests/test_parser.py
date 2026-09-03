@@ -37,6 +37,19 @@ class ParseScheduleBasicsTests(unittest.TestCase):
             ),
         )
 
+    def test_wrap_around_range_for_hour(self):
+        fields = parse_schedule("0 22-6 * * *")
+        self.assertEqual(fields[1], Range(22, 6))
+
+    def test_wrap_around_range_with_step(self):
+        fields = parse_schedule("0 22-6/2 * * *")
+        self.assertEqual(fields[1], Step(Range(22, 6), 2))
+
+    def test_wrap_around_range_still_enforces_bounds(self):
+        with self.assertRaises(CronSyntaxError) as ctx:
+            parse_schedule("0 22-24 * * *")
+        self.assertIn("24 is out of range for hour (expected 0-23)", str(ctx.exception))
+
     def test_step_on_wildcard(self):
         fields = parse_schedule("*/15 * * * *")
         self.assertEqual(fields[0], Step(Star(), 15))
@@ -117,14 +130,6 @@ class ParseScheduleErrorTests(unittest.TestCase):
         with self.assertRaises(CronSyntaxError) as ctx:
             parse_schedule("-5 * * * *")
         self.assertIn("invalid range '-5' in minute field", str(ctx.exception))
-
-    def test_range_start_greater_than_end(self):
-        with self.assertRaises(CronSyntaxError) as ctx:
-            parse_schedule("10-5 * * * *")
-        self.assertIn(
-            "range start (10) is greater than range end (5) in minute field",
-            str(ctx.exception),
-        )
 
     def test_step_missing_value_before_slash(self):
         with self.assertRaises(CronSyntaxError) as ctx:

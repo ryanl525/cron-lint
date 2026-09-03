@@ -121,6 +121,8 @@ can't be read. Every bad line in a file is reported, not just the first one.
 - Standard 5-field schedules: minute, hour, day of month, month, day of week
 - Wildcards (`*`), ranges (`1-5`), steps (`*/15`, `1-30/5`), and lists
   (`1,15,30`), including combinations like `10-40/5`
+- Wrap-around ranges where the start is greater than the end, such as
+  `22-6` for hour (10pm through 6am) or `FRI-MON` for day of week
 - Month names (`JAN`-`DEC`) and weekday names (`SUN`-`SAT`), case-insensitive
 - Weekday `7` as an alias for Sunday
 - Crontab files with comments and `NAME=value` lines

@@ -125,13 +125,8 @@ def _parse_range(text: str, col: int, spec: FieldSpec, line_text: str, lineno: i
         raise _error(lineno, col, line_text, f"invalid range {text!r} in {spec.name} field")
     start = _parse_value_token(start_text, col, spec, line_text, lineno)
     end = _parse_value_token(end_text, col + idx + 1, spec, line_text, lineno)
-    if start > end:
-        raise _error(
-            lineno,
-            col,
-            line_text,
-            f"range start ({start}) is greater than range end ({end}) in {spec.name} field",
-        )
+    # start > end is a wrap-around range (e.g. 22-6 for hour means 22, 23, 0,
+    # 1, ..., 6), which cron itself accepts, so there's nothing to reject here.
     return Range(start, end)
 
 
