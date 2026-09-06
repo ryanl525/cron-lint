@@ -100,6 +100,17 @@ both are restricted, because that's how cron itself evaluates a schedule
 like `0 0 13 * FRI` (the 13th of the month, or any Friday — not both at
 once). That's a common source of confusion for people writing cron by hand.
 
+`describe` also handles the 6- and 7-field forms, folding the seconds field
+into the clock time and adding a year clause when the year is restricted:
+
+```python
+print(describe(parse_schedule("30 0 9 * * *")))
+# at 09:00:30
+
+print(describe(parse_schedule("0 0 9 * 1 * 2030")))
+# at 09:00:00, in January, in year 2030
+```
+
 ### Command line
 
 Installing the package (`pip install -e .`) puts a `cronlint` command on your
@@ -126,6 +137,36 @@ can't be read. Every bad line in a file is reported, not just the first one.
 - Month names (`JAN`-`DEC`) and weekday names (`SUN`-`SAT`), case-insensitive
 - Weekday `7` as an alias for Sunday
 - Crontab files with comments and `NAME=value` lines
+- Optional 6- and 7-field schedules, for cron variants (Quartz among them)
+  that prepend a seconds field and/or append a year field: `second minute
+  hour day month weekday [year]`
+
+### Seconds and year fields
+
+`parse_schedule` infers the field count from how many tokens you give it:
+
+```python
+>>> from cronlint import parse_schedule
+>>> parse_schedule("30 0 9 * * *")          # seconds prepended
+(Value(n=30), Value(n=0), Value(n=9), Star(), Star(), Star())
+>>> parse_schedule("0 0 9 * * * 2030")      # seconds and a trailing year
+(Value(n=0), Value(n=0), Value(n=9), Star(), Star(), Star(), Value(n=2030))
+```
+
+Pass `fields=5`, `6`, or `7` to require a specific layout instead of
+guessing. `parse_crontab` and `lint_crontab` take the same `fields` keyword,
+applied to every entry in the file, since a crontab mixing field counts line
+to line would be unreadable:
+
+```python
+entries = parse_crontab(text, fields=6)
+```
+
+The `cronlint` command line takes a matching `--fields` flag:
+
+```
+$ cronlint --fields 6 /etc/cron.d/backup
+```
 
 ## License
 

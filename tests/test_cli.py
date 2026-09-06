@@ -67,6 +67,24 @@ class CliTests(unittest.TestCase):
             self.assertIn("60 is out of range for minute", output)
             self.assertIn("8 is out of range for day of week", output)
 
+    def test_fields_flag_validates_six_field_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write(tmp, "crontab", "30 0 2 * * * /usr/local/bin/backup.sh\n")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = main(["--fields", "6", path])
+            self.assertEqual(code, 0)
+            self.assertIn("OK", out.getvalue())
+
+    def test_fields_flag_reports_second_field_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write(tmp, "crontab", "70 0 2 * * * /usr/local/bin/backup.sh\n")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                code = main(["--fields", "6", path])
+            self.assertEqual(code, 1)
+            self.assertIn("70 is out of range for second", err.getvalue())
+
     def test_multiple_entries_pluralize_the_count(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = self._write(

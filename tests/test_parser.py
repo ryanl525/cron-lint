@@ -83,6 +83,47 @@ class ParseScheduleBasicsTests(unittest.TestCase):
         self.assertEqual(fields[4], Value(7))
 
 
+class ParseScheduleExtendedFieldsTests(unittest.TestCase):
+    def test_six_fields_infers_leading_seconds(self):
+        fields = parse_schedule("30 5 6 7 8 5")
+        self.assertEqual(len(fields), 6)
+        self.assertEqual(fields[0], Value(30))
+        self.assertEqual(
+            fields[1:], (Value(5), Value(6), Value(7), Value(8), Value(5))
+        )
+
+    def test_seven_fields_infers_seconds_and_year(self):
+        fields = parse_schedule("0 30 5 6 7 1 2030")
+        self.assertEqual(len(fields), 7)
+        self.assertEqual(fields[0], Value(0))
+        self.assertEqual(fields[6], Value(2030))
+
+    def test_second_out_of_range(self):
+        with self.assertRaises(CronSyntaxError) as ctx:
+            parse_schedule("60 5 6 7 8 5")
+        self.assertIn("60 is out of range for second (expected 0-59)", str(ctx.exception))
+
+    def test_year_out_of_range(self):
+        with self.assertRaises(CronSyntaxError) as ctx:
+            parse_schedule("0 30 5 6 7 1 1900")
+        self.assertIn("1900 is out of range for year (expected 1970-2099)", str(ctx.exception))
+
+    def test_explicit_fields_argument_forces_layout(self):
+        fields = parse_schedule("* * * * *", fields=5)
+        self.assertEqual(fields, (Star(), Star(), Star(), Star(), Star()))
+        with self.assertRaises(CronSyntaxError):
+            parse_schedule("* * * * * *", fields=5)
+
+    def test_invalid_fields_argument_is_rejected(self):
+        with self.assertRaises(ValueError):
+            parse_schedule("* * * * *", fields=4)
+
+    def test_too_many_fields_error_mentions_range(self):
+        with self.assertRaises(CronSyntaxError) as ctx:
+            parse_schedule("* * * * * * * *")
+        self.assertIn("expected 5 to 7 fields", str(ctx.exception))
+
+
 class ParseScheduleErrorTests(unittest.TestCase):
     def test_too_few_fields(self):
         with self.assertRaises(CronSyntaxError) as ctx:
@@ -226,6 +267,31 @@ class ParseCrontabTests(unittest.TestCase):
         self.assertIn("25 is out of range for hour", exc.message)
 
 
+class ParseCrontabExtendedFieldsTests(unittest.TestCase):
+    def test_six_field_entries_with_leading_seconds(self):
+        text = "30 0 2 * * * /usr/local/bin/backup.sh\n"
+        entries = parse_crontab(text, fields=6)
+        self.assertEqual(entries[0].fields[0], Value(30))
+        self.assertEqual(entries[0].command, "/usr/local/bin/backup.sh")
+
+    def test_seven_field_entries_with_seconds_and_year(self):
+        text = "0 30 0 2 * * 2030 /usr/local/bin/backup.sh\n"
+        entries = parse_crontab(text, fields=7)
+        self.assertEqual(entries[0].fields[0], Value(0))
+        self.assertEqual(entries[0].fields[6], Value(2030))
+        self.assertEqual(entries[0].command, "/usr/local/bin/backup.sh")
+
+    def test_six_fields_still_requires_a_command(self):
+        text = "30 0 2 * * *\n"
+        with self.assertRaises(CronSyntaxError) as ctx:
+            parse_crontab(text, fields=6)
+        self.assertIn("expected 6 schedule fields and a command", ctx.exception.message)
+
+    def test_invalid_fields_argument_is_rejected(self):
+        with self.assertRaises(ValueError):
+            parse_crontab("0 2 * * * /bin/one.sh\n", fields=8)
+
+
 class LintCrontabTests(unittest.TestCase):
     def test_valid_file_has_no_errors(self):
         text = "0 2 * * * /bin/one.sh\n30 3 * * * /bin/two.sh\n"
@@ -266,6 +332,17 @@ class LintCrontabTests(unittest.TestCase):
         self.assertEqual(entries, [])
         self.assertEqual(len(errors), 1)
         self.assertEqual(errors[0].lineno, 4)
+
+    def test_fields_argument_applies_to_every_line(self):
+        text = (
+            "30 0 2 * * * /bin/good.sh\n"
+            "70 0 2 * * * /bin/bad.sh\n"
+        )
+        entries, errors = lint_crontab(text, fields=6)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].command, "/bin/good.sh")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("70 is out of range for second", errors[0].message)
 
 
 if __name__ == "__main__":

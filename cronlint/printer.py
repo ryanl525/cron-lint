@@ -81,10 +81,35 @@ def _describe_month_unit(node) -> str:
     raise TypeError(f"unknown field node: {node!r}")
 
 
-def _describe_time(minute, hour) -> str:
-    if isinstance(minute, Value) and isinstance(hour, Value):
-        return f"at {hour.n:02d}:{minute.n:02d}"
-    return f"at {_describe_unit(minute, 'minute')}, {_describe_unit(hour, 'hour')}"
+def _describe_time(second, minute, hour) -> str:
+    if second is None or isinstance(second, Star):
+        if isinstance(minute, Value) and isinstance(hour, Value):
+            return f"at {hour.n:02d}:{minute.n:02d}"
+        return f"at {_describe_unit(minute, 'minute')}, {_describe_unit(hour, 'hour')}"
+    if isinstance(second, Value) and isinstance(minute, Value) and isinstance(hour, Value):
+        return f"at {hour.n:02d}:{minute.n:02d}:{second.n:02d}"
+    return (
+        f"at {_describe_unit(second, 'second')}, "
+        f"{_describe_unit(minute, 'minute')}, {_describe_unit(hour, 'hour')}"
+    )
+
+
+def _split_fields(fields: ScheduleFields):
+    """Pull out the five standard fields plus the optional second and year.
+
+    Accepts the plain 5-field form as well as the 6-field (seconds
+    prepended) and 7-field (seconds and year) extensions.
+    """
+    if len(fields) == 5:
+        minute, hour, day, month, weekday = fields
+        return None, minute, hour, day, month, weekday, None
+    if len(fields) == 6:
+        second, minute, hour, day, month, weekday = fields
+        return second, minute, hour, day, month, weekday, None
+    if len(fields) == 7:
+        second, minute, hour, day, month, weekday, year = fields
+        return second, minute, hour, day, month, weekday, year
+    raise ValueError(f"expected 5, 6, or 7 fields, got {len(fields)}")
 
 
 def describe(fields: ScheduleFields) -> str:
@@ -93,9 +118,9 @@ def describe(fields: ScheduleFields) -> str:
     Day-of-month and day-of-week are combined with "or" rather than "and"
     because that is how cron itself evaluates them when both are restricted.
     """
-    minute, hour, day, month, weekday = fields
+    second, minute, hour, day, month, weekday, year = _split_fields(fields)
 
-    clauses = [_describe_time(minute, hour)]
+    clauses = [_describe_time(second, minute, hour)]
 
     day_restricted = not isinstance(day, Star)
     weekday_restricted = not isinstance(weekday, Star)
@@ -110,5 +135,8 @@ def describe(fields: ScheduleFields) -> str:
 
     if not isinstance(month, Star):
         clauses.append(f"in {_describe_month_unit(month)}")
+
+    if year is not None and not isinstance(year, Star):
+        clauses.append(f"in {_describe_unit(year, 'year')}")
 
     return ", ".join(clauses)

@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from collections import namedtuple
 from dataclasses import dataclass
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 FieldSpec = namedtuple("FieldSpec", ["name", "min", "max", "names"])
 
@@ -32,6 +32,18 @@ FIELD_SPECS: Tuple[FieldSpec, ...] = (
     FieldSpec("month", 1, 12, MONTH_ABBR),
     FieldSpec("day of week", 0, 7, WEEKDAY_ABBR),
 )
+
+_SECOND_SPEC = FieldSpec("second", 0, 59, None)
+_YEAR_SPEC = FieldSpec("year", 1970, 2099, None)
+
+# Some cron variants (Quartz among them) prepend a seconds field and/or
+# append a year field to the usual five. The order when both are present is
+# seconds first, year last: second minute hour day month weekday [year].
+_FIELD_SPECS_BY_COUNT = {
+    5: FIELD_SPECS,
+    6: (_SECOND_SPEC,) + FIELD_SPECS,
+    7: (_SECOND_SPEC,) + FIELD_SPECS + (_YEAR_SPEC,),
+}
 
 _ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\s*=")
 _FULL_DIGITS_RE = re.compile(r"\d+\Z")
@@ -65,7 +77,9 @@ class ListExpr:
 
 
 FieldNode = Union[Star, Value, Range, Step, ListExpr]
-ScheduleFields = Tuple[FieldNode, FieldNode, FieldNode, FieldNode, FieldNode]
+# 5 fields for standard cron, 6 with a leading seconds field, 7 with both a
+# leading seconds field and a trailing year field.
+ScheduleFields = Tuple[FieldNode, ...]
 
 
 @dataclass(frozen=True)
@@ -186,51 +200,84 @@ def _tokenize(line: str):
     return [(m.group(), m.start() + 1) for m in re.finditer(r"\S+", line)]
 
 
-def _parse_fields(field_tokens, line_text: str, lineno: int) -> ScheduleFields:
+def _parse_fields(field_tokens, specs: Tuple[FieldSpec, ...], line_text: str, lineno: int) -> ScheduleFields:
     return tuple(
         _parse_field(tok_text, tok_col, spec, line_text, lineno)
-        for (tok_text, tok_col), spec in zip(field_tokens, FIELD_SPECS)
+        for (tok_text, tok_col), spec in zip(field_tokens, specs)
     )
 
 
-def parse_schedule(text: str, *, lineno: int = 1) -> ScheduleFields:
-    """Parse a bare 5-field cron schedule, e.g. "*/15 8-17 * * 1-5"."""
+def _field_count_options(fields: Union[int, None]) -> Tuple[int, ...]:
+    if fields is None:
+        return (5, 6, 7)
+    if fields not in _FIELD_SPECS_BY_COUNT:
+        raise ValueError(f"fields must be 5, 6, or 7, not {fields!r}")
+    return (fields,)
+
+
+def parse_schedule(text: str, *, lineno: int = 1, fields: Optional[int] = None) -> ScheduleFields:
+    """Parse a bare cron schedule, e.g. "*/15 8-17 * * 1-5".
+
+    By default the field count is inferred from how many tokens are present
+    (5 for standard cron, 6 with a leading seconds field, 7 with seconds and
+    a trailing year field too). Pass `fields=5`, `6`, or `7` to require a
+    specific layout instead.
+    """
+    options = _field_count_options(fields)
     tokens = _tokenize(text)
-    if len(tokens) < 5:
+    if len(tokens) < options[0]:
+        wanted = _describe_field_counts(options)
         raise _error(
-            lineno, len(text) + 1, text, f"expected 5 fields, found {len(tokens)}"
+            lineno, len(text) + 1, text, f"expected {wanted}, found {len(tokens)}"
         )
-    if len(tokens) > 5:
-        extra_text, extra_col = tokens[5]
+    if len(tokens) > options[-1]:
+        extra_text, extra_col = tokens[options[-1]]
+        wanted = _describe_field_counts(options)
         raise _error(
-            lineno, extra_col, text, f"expected 5 fields, found extra token {extra_text!r}"
+            lineno, extra_col, text, f"expected {wanted}, found extra token {extra_text!r}"
         )
-    return _parse_fields(tokens, text, lineno)
+    count = len(tokens) if len(tokens) in options else options[-1]
+    return _parse_fields(tokens, _FIELD_SPECS_BY_COUNT[count], text, lineno)
 
 
-def _parse_line(line: str, lineno: int) -> CronEntry:
+def _describe_field_counts(options: Tuple[int, ...]) -> str:
+    if len(options) == 1:
+        return f"{options[0]} fields"
+    return f"{options[0]} to {options[-1]} fields"
+
+
+def _parse_line(line: str, lineno: int, fields: int = 5) -> CronEntry:
+    specs = _FIELD_SPECS_BY_COUNT[fields]
     tokens = _tokenize(line)
-    if len(tokens) < 6:
+    if len(tokens) < fields + 1:
         raise _error(
             lineno,
             len(line) + 1,
             line,
-            f"expected 5 schedule fields and a command, found {len(tokens)} field(s)",
+            f"expected {fields} schedule fields and a command, found {len(tokens)} field(s)",
         )
 
-    fields = _parse_fields(tokens[:5], line, lineno)
-    command_col = tokens[5][1]
+    parsed_fields = _parse_fields(tokens[:fields], specs, line, lineno)
+    command_col = tokens[fields][1]
     command = line[command_col - 1 :]
-    return CronEntry(lineno=lineno, fields=fields, command=command)
+    return CronEntry(lineno=lineno, fields=parsed_fields, command=command)
 
 
-def parse_crontab(text: str) -> List[CronEntry]:
+def parse_crontab(text: str, *, fields: int = 5) -> List[CronEntry]:
     """Parse a crontab-style file: comments, env assignments, and entries.
+
+    `fields` sets how many schedule fields each entry has before the command
+    starts: 5 for standard cron, 6 for a leading seconds field, or 7 for
+    seconds plus a trailing year field. It applies to the whole file, since a
+    crontab mixing conventions line to line would be unreadable anyway.
 
     Returns a list of CronEntry. Raises CronSyntaxError on the first invalid
     entry, pointing at the exact line and column. Use lint_crontab if you
     want every error in the file instead of just the first.
     """
+    if fields not in _FIELD_SPECS_BY_COUNT:
+        raise ValueError(f"fields must be 5, 6, or 7, not {fields!r}")
+
     entries = []
     for lineno, line in enumerate(text.splitlines(), start=1):
         stripped = line.strip()
@@ -239,19 +286,23 @@ def parse_crontab(text: str) -> List[CronEntry]:
         if _ENV_ASSIGNMENT_RE.match(stripped):
             continue
 
-        entries.append(_parse_line(line, lineno))
+        entries.append(_parse_line(line, lineno, fields))
 
     return entries
 
 
-def lint_crontab(text: str) -> Tuple[List[CronEntry], List[CronSyntaxError]]:
+def lint_crontab(text: str, *, fields: int = 5) -> Tuple[List[CronEntry], List[CronSyntaxError]]:
     """Parse a crontab-style file, collecting every bad line instead of
     stopping at the first one.
 
     A syntax error on one line says nothing about the lines around it, so
     there's no reason a single bad entry should hide the rest of the file's
-    problems. Returns (valid_entries, errors), each in file order.
+    problems. Returns (valid_entries, errors), each in file order. See
+    parse_crontab for what `fields` means.
     """
+    if fields not in _FIELD_SPECS_BY_COUNT:
+        raise ValueError(f"fields must be 5, 6, or 7, not {fields!r}")
+
     entries = []
     errors = []
     for lineno, line in enumerate(text.splitlines(), start=1):
@@ -262,7 +313,7 @@ def lint_crontab(text: str) -> Tuple[List[CronEntry], List[CronSyntaxError]]:
             continue
 
         try:
-            entries.append(_parse_line(line, lineno))
+            entries.append(_parse_line(line, lineno, fields))
         except CronSyntaxError as exc:
             errors.append(exc)
 
