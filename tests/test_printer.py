@@ -53,6 +53,24 @@ class DescribeStandardFieldsTests(unittest.TestCase):
             "at minutes 0, 15, 30, 45, every hour",
         )
 
+    def test_step_with_range_base_in_minute_field(self):
+        self.assertEqual(
+            describe(parse_schedule("10-40/5 * * * *")),
+            "at every 5 minutes between 10 and 40, every hour",
+        )
+
+    def test_step_with_range_base_in_weekday_field(self):
+        self.assertEqual(
+            describe(parse_schedule("0 0 * * mon-fri/2")),
+            "at 00:00, on every 2 days of the week between Monday and Friday",
+        )
+
+    def test_step_with_range_base_in_month_field(self):
+        self.assertEqual(
+            describe(parse_schedule("0 0 * mar-sep/2 *")),
+            "at 00:00, in every 2 months between March and September",
+        )
+
 
 class DescribeExtendedFieldsTests(unittest.TestCase):
     def test_seconds_field_included_in_clock_time(self):

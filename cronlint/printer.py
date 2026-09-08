@@ -35,6 +35,8 @@ def _describe_unit(node, name: str) -> str:
     if isinstance(node, Step):
         if isinstance(node.base, Star):
             return f"every {node.step} {name}s"
+        if isinstance(node.base, Range):
+            return f"every {node.step} {name}s between {node.base.start} and {node.base.end}"
         return f"every {node.step} {name}s starting at {_describe_unit(node.base, name)}"
     if isinstance(node, ListExpr):
         return f"{name}s " + ", ".join(_describe_item(item) for item in node.items)
@@ -55,6 +57,11 @@ def _describe_weekday_unit(node) -> str:
     if isinstance(node, Step):
         if isinstance(node.base, Star):
             return f"every {node.step} days of the week"
+        if isinstance(node.base, Range):
+            return (
+                f"every {node.step} days of the week between "
+                f"{_weekday_name(node.base.start)} and {_weekday_name(node.base.end)}"
+            )
         return f"every {node.step} days of the week starting at {_describe_weekday_unit(node.base)}"
     if isinstance(node, ListExpr):
         return ", ".join(_describe_weekday_unit(item) for item in node.items)
@@ -75,6 +82,11 @@ def _describe_month_unit(node) -> str:
     if isinstance(node, Step):
         if isinstance(node.base, Star):
             return f"every {node.step} months"
+        if isinstance(node.base, Range):
+            return (
+                f"every {node.step} months between "
+                f"{_month_name(node.base.start)} and {_month_name(node.base.end)}"
+            )
         return f"every {node.step} months starting at {_describe_month_unit(node.base)}"
     if isinstance(node, ListExpr):
         return ", ".join(_describe_month_unit(item) for item in node.items)
