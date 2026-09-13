@@ -72,6 +72,32 @@ class DescribeStandardFieldsTests(unittest.TestCase):
         )
 
 
+class DescribeListWithStepItemsTests(unittest.TestCase):
+    def test_list_with_range_item_uses_through(self):
+        self.assertEqual(
+            describe(parse_schedule("1,10-20 * * * *")),
+            "at minutes 1, 10 through 20, every hour",
+        )
+
+    def test_list_with_wildcard_step_item(self):
+        self.assertEqual(
+            describe(parse_schedule("1,*/15 * * * *")),
+            "at minutes 1, every 15, every hour",
+        )
+
+    def test_list_with_range_step_item(self):
+        self.assertEqual(
+            describe(parse_schedule("0,10-40/5 * * * *")),
+            "at minutes 0, every 5 between 10 and 40, every hour",
+        )
+
+    def test_list_with_value_step_item(self):
+        self.assertEqual(
+            describe(parse_schedule("0 9,12/3 * * *")),
+            "at minute 0, hours 9, every 3 starting at 12",
+        )
+
+
 class DescribeExtendedFieldsTests(unittest.TestCase):
     def test_seconds_field_included_in_clock_time(self):
         self.assertEqual(describe(parse_schedule("30 0 14 * * *")), "at 14:00:30")

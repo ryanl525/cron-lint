@@ -18,10 +18,13 @@ def _describe_item(node) -> str:
     if isinstance(node, Value):
         return str(node.n)
     if isinstance(node, Range):
-        return f"{node.start}-{node.end}"
+        return f"{node.start} through {node.end}"
     if isinstance(node, Step):
-        base = "*" if isinstance(node.base, Star) else _describe_item(node.base)
-        return f"{base}/{node.step}"
+        if isinstance(node.base, Star):
+            return f"every {node.step}"
+        if isinstance(node.base, Range):
+            return f"every {node.step} between {node.base.start} and {node.base.end}"
+        return f"every {node.step} starting at {_describe_item(node.base)}"
     raise TypeError(f"unexpected node in list: {node!r}")
 
 
